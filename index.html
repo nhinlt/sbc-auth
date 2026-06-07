@@ -1,51 +1,92 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Connecting…</title>
+<head><meta charset="UTF-8"><title>SBC Drive Auth</title>
 <style>
-  body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;
-       height:100vh;margin:0;background:#f0fdfe;color:#0c3d44}
-  .box{text-align:center;padding:32px;border-radius:12px;background:#fff;
-       box-shadow:0 4px 24px rgba(13,140,158,.15);border:1px solid #c8edf2;min-width:280px}
-  .icon{font-size:36px;margin-bottom:12px}
-  .title{font-size:15px;font-weight:700;margin-bottom:6px}
-  .sub{font-size:12px;color:#6b7280}
+body{font-family:'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;
+     height:100vh;margin:0;background:#f0fdfe;color:#0c3d44}
+.box{text-align:center;padding:32px 28px;border-radius:14px;background:#fff;
+     box-shadow:0 4px 28px rgba(13,140,158,.18);border:1px solid #c8edf2;min-width:300px;max-width:420px}
+.icon{font-size:40px;margin-bottom:10px}
+.title{font-size:15px;font-weight:700;margin-bottom:6px}
+.sub{font-size:11px;color:#6b7280;line-height:1.6}
+.token-box{margin-top:18px;display:none}
+.token-label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;
+             letter-spacing:.05em;margin-bottom:6px;text-align:left}
+.token-input{width:100%;border:1px solid #96d9e4;border-radius:7px;padding:8px 10px;
+             font-size:10px;font-family:monospace;outline:none;box-sizing:border-box;
+             background:#f5fdfe;color:#0c3d44;word-break:break-all}
+.btn-copy{margin-top:10px;width:100%;padding:9px;border:none;border-radius:7px;
+          background:#0d8c9e;color:#fff;font-size:12px;font-weight:700;cursor:pointer;
+          font-family:inherit;transition:background .15s}
+.btn-copy:hover{background:#0a7080}
+.btn-copy.copied{background:#059669}
+.err{color:#dc2626}
 </style>
 </head>
 <body>
 <div class="box">
   <div class="icon" id="icon">⏳</div>
-  <div class="title" id="title">Đang kết nối Drive…</div>
-  <div class="sub" id="sub">Cửa sổ này sẽ tự đóng</div>
+  <div class="title" id="title">Đang xử lý…</div>
+  <div class="sub" id="sub"></div>
+  <div class="token-box" id="token-box">
+    <div class="token-label">Access Token (copy để dán vào dashboard)</div>
+    <input class="token-input" id="token-display" type="text" readonly>
+    <button class="btn-copy" id="btn-copy" onclick="copyToken()">📋 Copy Token</button>
+  </div>
 </div>
 <script>
-  (function(){
-    var hash = window.location.hash.substring(1);
-    var params = new URLSearchParams(hash);
-    var token = params.get('access_token');
-    var error = params.get('error');
+(function(){
+  var hash   = window.location.hash.substring(1);
+  var search = window.location.search.substring(1);
+  var params = new URLSearchParams(hash||search);
+  var token  = params.get('access_token');
+  var error  = params.get('error');
 
-    if(token){
-      // Gửi token về cửa sổ mở popup (dashboard)
-      if(window.opener && !window.opener.closed){
-        window.opener.postMessage({type:'GDRIVE_TOKEN', access_token: token}, '*');
-      }
-      document.getElementById('icon').textContent = '✅';
-      document.getElementById('title').textContent = 'Drive đã kết nối!';
-      document.getElementById('sub').textContent = 'Đóng cửa sổ này hoặc chờ tự đóng…';
-      setTimeout(function(){ window.close(); }, 1500);
-    } else if(error){
-      document.getElementById('icon').textContent = '⚠️';
-      document.getElementById('title').textContent = 'Lỗi: ' + error;
-      document.getElementById('sub').textContent = 'Đóng cửa sổ và thử lại';
-      if(window.opener && !window.opener.closed){
-        window.opener.postMessage({type:'GDRIVE_ERROR', error: error}, '*');
-      }
-    } else {
-      document.getElementById('icon').textContent = '❓';
-      document.getElementById('title').textContent = 'Không có token';
-      document.getElementById('sub').textContent = 'Thử lại từ đầu';
+  if(token){
+    // 1. Thử postMessage về opener (hoạt động khi popup + same-origin opener)
+    if(window.opener && !window.opener.closed){
+      try{ window.opener.postMessage({type:'GDRIVE_TOKEN', access_token:token}, '*'); }catch(e){}
     }
-  })();
+    // 2. Hiển thị token để copy thủ công (fallback khi COOP block)
+    document.getElementById('icon').textContent = '✅';
+    document.getElementById('title').textContent = 'Drive đã kết nối!';
+    document.getElementById('sub').textContent = 'Cửa sổ sẽ tự đóng sau 3 giây. Nếu không tự đóng, copy token bên dưới và dán vào ô trong dashboard.';
+    var tb = document.getElementById('token-box');
+    tb.style.display = 'block';
+    document.getElementById('token-display').value = token;
+    // Auto close sau 3 giây nếu opener nhận được
+    setTimeout(function(){ try{ window.close(); }catch(e){} }, 3000);
+  } else if(error){
+    document.getElementById('icon').textContent = '⚠️';
+    document.getElementById('title').textContent = 'Lỗi đăng nhập';
+    document.getElementById('sub').innerHTML = '<span class="err">'+error+'</span><br>Đóng cửa sổ này và thử lại.';
+    if(window.opener&&!window.opener.closed){
+      try{ window.opener.postMessage({type:'GDRIVE_ERROR', error:error}, '*'); }catch(e){}
+    }
+  } else {
+    document.getElementById('icon').textContent = '❓';
+    document.getElementById('title').textContent = 'Không có token';
+    document.getElementById('sub').textContent = 'Vui lòng thử lại từ dashboard.';
+  }
+})();
+
+function copyToken(){
+  var input = document.getElementById('token-display');
+  input.select(); input.setSelectionRange(0,99999);
+  try{
+    navigator.clipboard.writeText(input.value).then(function(){
+      showCopied();
+    }).catch(function(){
+      document.execCommand('copy'); showCopied();
+    });
+  }catch(e){ document.execCommand('copy'); showCopied(); }
+}
+function showCopied(){
+  var btn = document.getElementById('btn-copy');
+  btn.textContent = '✓ Đã copy!';
+  btn.classList.add('copied');
+  setTimeout(function(){ btn.textContent='📋 Copy Token'; btn.classList.remove('copied'); }, 2000);
+}
 </script>
 </body>
 </html>
